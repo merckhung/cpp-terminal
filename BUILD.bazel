@@ -1,0 +1,214 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# --- Warnings ---
+
+cc_library(
+    name = "warnings",
+    copts = select({
+        "@platforms//os:windows": [
+            "/W4",
+            "/Wall",
+            "/WL",
+            "/wd5045",
+            "/wd4820",
+            "/wd4514",
+            "/wd4710",
+            "/utf-8",
+        ],
+        "//conditions:default": [
+            "-Wall",
+            "-Wextra",
+            "-Wpedantic",
+            "-Wpointer-arith",
+            "-Wredundant-decls",
+            "-Wundef",
+            "-Wwrite-strings",
+            "-Wdelete-non-virtual-dtor",
+            "-Wnoexcept",
+        ],
+    }),
+)
+
+cc_library(
+    name = "example_warnings",
+    copts = select({
+        "@platforms//os:windows": [
+            "/wd4061",
+            "/utf-8",
+            "/wd4668",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+# --- Library ---
+
+genrule(
+    name = "version_cpp",
+    srcs = ["cpp-terminal/private/version.cpp.in"],
+    outs = ["cpp-terminal/private/version.cpp"],
+    cmd = "sed -e 's/@cpp-terminal_VERSION_MAJOR@/1/g' " +
+          "-e 's/@cpp-terminal_VERSION_MINOR@/0/g' " +
+          "-e 's/@cpp-terminal_VERSION_PATCH@/0/g' " +
+          "-e 's|@cpp-terminal_HOMEPAGE_URL@|https://github.com/jupyter-xeus/cpp-terminal|g' " +
+          "$< > $@",
+)
+
+cc_library(
+    name = "cpp-terminal-private",
+    srcs = [
+        "cpp-terminal/private/args.cpp",
+        "cpp-terminal/private/blocking_queue.cpp",
+        "cpp-terminal/private/conversion.cpp",
+        "cpp-terminal/private/cursor.cpp",
+        "cpp-terminal/private/env.cpp",
+        "cpp-terminal/private/exception.cpp",
+        "cpp-terminal/private/file.cpp",
+        "cpp-terminal/private/file_initializer.cpp",
+        "cpp-terminal/private/input.cpp",
+        "cpp-terminal/private/return_code.cpp",
+        "cpp-terminal/private/screen.cpp",
+        "cpp-terminal/private/signals.cpp",
+        "cpp-terminal/private/sigwinch.cpp",
+        "cpp-terminal/private/terminal_impl.cpp",
+        "cpp-terminal/private/terminfo.cpp",
+        "cpp-terminal/private/tty.cpp",
+        "cpp-terminal/private/unicode.cpp",
+        ":version_cpp",
+    ],
+    hdrs = glob([
+        "cpp-terminal/*.hpp",
+        "cpp-terminal/private/*.hpp",
+    ]),
+    includes = [
+        "cpp-terminal",
+        "cpp-terminal/private",
+    ],
+    deps = [":warnings"],
+    linkopts = select({
+        "@platforms//os:windows": [],
+        "//conditions:default": ["-lpthread"],
+    }),
+)
+
+cc_library(
+    name = "cpp-terminal",
+    srcs = [
+        "cpp-terminal/args.cpp",
+        "cpp-terminal/buffer.cpp",
+        "cpp-terminal/color.cpp",
+        "cpp-terminal/cursor.cpp",
+        "cpp-terminal/event.cpp",
+        "cpp-terminal/focus.cpp",
+        "cpp-terminal/iostream.cpp",
+        "cpp-terminal/iostream_initializer.cpp",
+        "cpp-terminal/mouse.cpp",
+        "cpp-terminal/options.cpp",
+        "cpp-terminal/prompt.cpp",
+        "cpp-terminal/screen.cpp",
+        "cpp-terminal/stream.cpp",
+        "cpp-terminal/style.cpp",
+        "cpp-terminal/terminal.cpp",
+        "cpp-terminal/terminal_impl.cpp",
+        "cpp-terminal/terminal_initializer.cpp",
+        "cpp-terminal/window.cpp",
+    ],
+    hdrs = glob(["cpp-terminal/*.hpp"]),
+    includes = ["cpp-terminal"],
+    deps = [
+        ":cpp-terminal-private",
+        ":warnings",
+    ],
+)
+
+# --- Examples ---
+
+EXAMPLES = [
+    "args",
+    "cin_cooked",
+    "cin_raw",
+    "colors",
+    "cursor",
+    "cout",
+    "events",
+    "keys",
+    "kilo",
+    "menu",
+    "menu_window",
+    "minimal",
+    "prompt_immediate",
+    "prompt_multiline",
+    "prompt_not_immediate",
+    "prompt_simple",
+    "styles",
+    "utf8",
+    "signal",
+]
+
+WIN_EXAMPLES = [
+    "attach_console",
+    "attach_console_minimal",
+]
+
+[cc_binary(
+    name = example,
+    srcs = ["examples/" + example + ".cpp"],
+    deps = [
+        ":cpp-terminal",
+        ":warnings",
+        ":example_warnings",
+    ],
+    linkopts = select({
+        "@platforms//os:windows": [],
+        "//conditions:default": ["-lpthread"],
+    }) if example == "events" or example == "signal" else [],
+) for example in EXAMPLES]
+
+[cc_binary(
+    name = example,
+    srcs = ["examples/" + example + ".cpp"],
+    deps = [
+        ":cpp-terminal",
+        ":warnings",
+        ":example_warnings",
+    ],
+    target_compatible_with = ["@platforms//os:windows"],
+) for example in WIN_EXAMPLES]
+
+# --- Tests ---
+
+TESTS = [
+    "file",
+    "key",
+    "screen",
+    "events",
+    "exception",
+    "unicode",
+    "options",
+    "version",
+]
+
+[cc_test(
+    name = test + "_test",
+    srcs = ["tests/" + test + ".test.cpp"],
+    deps = [
+        ":cpp-terminal",
+        "@doctest//:doctest",
+    ],
+) for test in TESTS]
+
+cc_test(
+    name = "args_test",
+    srcs = ["tests/args.test.cpp"],
+    args = ["Bonjour", "Hello", "大家好"],
+    deps = [
+        ":cpp-terminal",
+        "@doctest//:doctest",
+    ],
+    target_compatible_with = select({
+        "@platforms//os:windows": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
+)
